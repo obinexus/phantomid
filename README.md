@@ -1,323 +1,244 @@
-# Mmuoko Connect (མྨུཨོཀོ་ཀོནེཀཏ)
+# PhantomID Network System
 
-## The Resonant Social Network for OBINexus
+## Beyond Zero-Knowledge: Quantum-Coherent Identity Management
 
-### Etymology & Tonal Philosophy
+### Executive Summary
 
-**Mmuoko** (Mmụọkọ) derives from Igbo tonal language:
-- **Mmu** (high tone) - "spirit/essence"
-- **Oko** (low tone) - "studio/creative space"
+PhantomID transcends traditional cryptographic identity systems by implementing a fault-tolerant, self-healing hierarchical tree of anonymous accounts that maintains coherence through principles inspired by quantum entanglement. This daemon-based system continuously validates relationships using Zero-Knowledge Proofs (ZKPs) while ensuring network integrity without exposing sensitive identity information.
 
-The name embodies our philosophy: high concepts grounded in practical creation.
+### Core Innovation: Indirect Quantum Coherence
 
-### Vision
+Unlike conventional PKI or blockchain systems, PhantomID leverages the conceptual properties of subatomic particle behavior to ensure network coherence through:
 
-Mmuoko Connect transcends traditional social media by implementing tonal communication patterns inspired by Igbo language structures and Nsibidi ancient writing systems. We create resonant connections where every interaction has both high (strategic) and low (operational) tones.
-
-## Core Concept: Tonal Social Networking
-
-Traditional social media flattens communication. Mmuoko Connect introduces **7 Tonal Layers**:
-
-```
-Layer 7: Vision (Ọhụụ)      - Highest strategic tone
-Layer 6: Philosophy (Nkà)    - Conceptual frameworks
-Layer 5: Research (Nyocha)   - Academic discourse
-Layer 4: Development (Mmepe) - Technical implementation
-Layer 3: Community (Obodo)   - Social interaction
-Layer 2: Operations (Ọrụ)    - Daily activities
-Layer 1: Foundation (Ntọala) - Ground truth
-```
+- **Entangled Node States**: Parent-child relationships maintain quantum-like correlation
+- **Superposition of Trust**: Nodes exist in multiple trust states until observed
+- **Coherent Collapse**: Verification causes deterministic state resolution
+- **Non-Local Correlation**: Distributed nodes maintain instantaneous coherence
 
 ## Architecture
 
 ```
-mmuoko-connect/
-├── core/                 # Core platform engine
-│   ├── tonal-engine/     # Tonal analysis and routing
-│   ├── resonance/        # Content harmonization
-│   └── nsibidi/          # Symbol-based communication
-├── platforms/            # Platform integrations
-│   ├── polyglot-x/       # Multi-language X integration
-│   ├── tiktok-schema/    # TikTok with OBINexus schema
-│   ├── resonant-tubes/   # YouTube tonal optimization
-│   └── iwu-channels/     # Native OBINexus channels
-├── content/              # Content management
-│   ├── research/         # Research network posts
-│   ├── development/      # Dev team updates
-│   └── community/        # Community engagement
-└── analytics/            # Tonal analytics engine
+phantomid/
+├── bin/               # Compiled binaries and shared libraries
+├── obj/               # Intermediate build artifacts
+├── src/               # Core implementation
+│   ├── main.c         # Daemon initialization and signal handling
+│   ├── network.c/.h   # TCP server and client connection management
+│   └── phantomid.c/.h # Core identity tree and ZKP implementation
+├── config/            # Runtime configuration files
+│   ├── core/          # Core daemon settings
+│   ├── security/      # Trust policies and ZKP parameters
+│   └── templates/     # Message templates
+├── docs/              # Formal proofs and design patterns
+├── Makefile*          # Build configurations for Unix/Windows
+└── README.md          # This file
 ```
 
-## The Nsibidi Protocol
+### Fault-Tolerant Cluster Architecture
 
-Inspired by ancient Nsibidi writing, we implement visual-tonal communication:
-
-```
-◈ = High tone marker (strategic content)
-◉ = Low tone marker (operational content)
-◐ = Rising tone (questions/exploration)
-◑ = Falling tone (conclusions/decisions)
-◊ = Mid tone (neutral information)
-◈◉ = Harmonic (balanced content)
-⟠ = Resonance point (viral potential)
-```
-
-## Platform Integration Schema
-
-All posts follow the OBINexus naming convention:
+PhantomID implements a distributed cluster model where:
 
 ```
-<platform>.<tone>.<content-type>.obinexus.<team>.<timestamp>
+Cluster α ←→ Cluster β ←→ Cluster γ
+    ↓            ↓            ↓
+[Domain A]   [Domain B]   [Domain C]
+```
+
+Each cluster maintains:
+- **Read/Write/Execute** permissions for its domain
+- **Phantom Aura Seal** authentication for cross-cluster communication
+- **Fault tolerance** through orphan state management
+
+## The Phantom Aura Seal Protocol
+
+Every node receives a unique "Phantom Aura Seal" that:
+
+1. **Encodes** the node's position in the trust hierarchy
+2. **Seals** the cryptographic commitment to the network
+3. **Enables** indirect communication through quantum-like channels
+
+### Indirect Communication Model
+
+```
+Node A ≈≈≈ Quantum Channel ≈≈≈ Node B
+  ↓                              ↓
+[Seal A]                      [Seal B]
+```
+
+Keywords: `indirect`, `communication`, `coherence`, `entanglement`
+
+## OBINexus Integration Schema
+
+The system follows the OBINexus organizational structure:
+
+```
+<service>.<operation>.obinexus.<department>.<division>.[gov].org
 ```
 
 Examples:
-- `tiktok.high.research.obinexus.crypto.2025-09-12`
-- `x.low.operations.obinexus.dev.2025-09-13`
-- `youtube.harmonic.tutorial.obinexus.education.2025-09-14`
+- `phantomid.verify.obinexus.security.identity.org`
+- `cluster.sync.obinexus.network.coherence.gov.org`
+- `seal.issue.obinexus.crypto.quantum.org`
 
-## Content Strategy
+## Core Features
 
-### 1. Research Network Posts (Layer 5)
-- PhantomID architecture explanations
-- Zero-knowledge proof visualizations
-- Quantum coherence demonstrations
+### 1. Daemonized Identity Management
+- Persistent service maintaining live identity tree state
+- Continuous cryptographic verification using modified Schnorr protocols
+- Automatic node expiration and renewal
 
-### 2. Development Updates (Layer 4)
-- Code release announcements
-- Technical deep-dives
-- Live coding sessions
+### 2. Orphaned Cryptographic State
+When parent nodes fail:
+- Children enter "Orphaned State" maintaining identity preservation
+- Anti-abuse mechanisms prevent malicious control retention
+- Autonomous recovery through three paths:
+  - **Isolation Mode**: Independent operation
+  - **Subtree Formation**: Lateral trust establishment
+  - **Reparenting**: Adoption by valid nodes
 
-### 3. Community Engagement (Layer 3)
-- Team member spotlights
-- User success stories
-- Cultural exchanges (Igbo tech terminology)
-
-### 4. Operational Updates (Layer 2)
-- Service status
-- Maintenance windows
-- Performance metrics
-
-## Team Roles & Tonal Assignments
-
-**High Tone Contributors (Strategic):**
-- NNAMDI MICHAEL OKPALA - Visionary Architecture
-- Chydea Chika - Philosophical Framework
-
-**Low Tone Contributors (Operational):**
-- Nweke Madu - Implementation Details
-- Chononso Ndulu - Community Management
-
-**Harmonic Contributors (Balanced):**
-- Mazi Chike - Cross-tonal Integration
-- Chydie Okpara - Content Harmonization
-
-## Musical Theory Integration
-
-Drawing from NNAMDI's musical theory background (age 10), each post category has a musical signature:
-
-```javascript
-const tonalSignatures = {
-  research: {
-    key: "C Major",
-    tempo: 120,    // Andante
-    dynamic: "mf", // Mezzo-forte
-    pattern: "◈◐◊◉" // High-Rising-Mid-Low
-  },
-  development: {
-    key: "G Minor",
-    tempo: 140,    // Allegro
-    dynamic: "f",  // Forte
-    pattern: "◉◈◉◈" // Low-High alternation
-  },
-  community: {
-    key: "F Major",
-    tempo: 100,    // Moderato
-    dynamic: "mp", // Mezzo-piano
-    pattern: "◊◊◐◑" // Stable with variation
-  }
-};
+### 3. Zero-Knowledge Proof Implementation
+```c
+// Modified Schnorr Protocol with Quantum Coherence
+t = g^r mod p          // Commitment (Superposition)
+c ∈ Z_q               // Challenge (Measurement)
+s = r + c * x_A mod q  // Response (Collapse)
+g^s ?= t * y_A^c mod p // Verification (Coherence Check)
 ```
 
-## Content Creation Workflow
+### 4. Network Healing Protocol
+Autonomous recovery sequence:
+1. Detect parent node failure/deletion
+2. Transition children to orphaned state
+3. Broadcast orphan status to network
+4. Initiate recovery based on policy
+5. Verify new relationships via fresh ZKPs
+6. Update tree structure and resume
 
-### 1. Tonal Analysis
-Before posting, content passes through tonal analysis:
-```bash
-mmuoko analyze --content "Your post content" --target-tone high
-```
+## Social Media Integration
 
-### 2. Harmonic Optimization
-Adjust content for maximum resonance:
-```bash
-mmuoko harmonize --input post.md --platform tiktok
-```
+PhantomID integrates with OBINexus social platforms for:
+- Live research network updates
+- Cluster status broadcasting
+- Development team collaboration
 
-### 3. Cross-Platform Deployment
-Deploy with tonal consistency:
-```bash
-mmuoko deploy --post optimized.json --platforms all --tone harmonic
-```
+Supported platforms:
+- Polyglot X
+- TikTok (with schema compliance)
+- Custom OBINexus channels
 
-## API Integration
+## Development Team
 
-### REST Endpoints
-```
-POST   /api/v1/content/analyze     # Tonal analysis
-POST   /api/v1/content/harmonize   # Content optimization
-GET    /api/v1/analytics/resonance # Engagement metrics
-POST   /api/v1/deploy/multi        # Multi-platform deployment
-```
+**Core Contributors:**
+- NNAMDI MICHAEL OKPALA (Lead Developer)
+- Chydea Chika (Network Architecture)
+- Nweke Madu (Cryptographic Implementation)
+- Chononso Ndulu (Social Integration)
 
-### WebSocket Streams
-```
-ws://mmuoko.obinexus.org/live/tonal-stream   # Real-time tonal analysis
-ws://mmuoko.obinexus.org/live/resonance      # Viral detection
-```
+**Research Division:**
+- OBINexus Quantum Computing Lab
+- Distributed Systems Research Group
 
-## Language Support
-
-Following the Niger-Congo language classification, we support:
-
-1. **Igbo** (Primary) - Full tonal analysis
-2. **Yoruba** - Tonal pattern recognition
-3. **Hausa** - Contextual translation
-4. **English** - Tonal mapping
-5. **French** - Accent preservation (où → high tone)
-6. **Portuguese** - Rhythmic alignment
-7. **Spanish** - Prosodic matching
-
-## Metrics & Analytics
-
-### Resonance Score (RS)
-Measures how well content resonates across tonal layers:
-```
-RS = (Engagement × Tonal_Clarity × Cultural_Relevance) / Time_Decay
-```
-
-### Harmonic Index (HI)
-Evaluates balance between high and low tones:
-```
-HI = |High_Tone_Count - Low_Tone_Count| / Total_Tones
-```
-
-Perfect harmony: HI = 0
-
-## Installation
+## Build Instructions
 
 ### Prerequisites
-```bash
-# Node.js 18+ with tonal analysis modules
-npm install -g @obinexus/mmuoko-cli
 
-# Python 3.9+ for Nsibidi processing
-pip install nsibidi-protocol tonal-analysis
+**Linux/Unix:**
+```bash
+sudo apt-get install build-essential libssl-dev pkg-config
 ```
 
-### Setup
-```bash
-# Clone repository
-git clone https://github.com/obinexus/mmuoko-connect.git
-cd mmuoko-connect
-
-# Install dependencies
-npm install
-python -m pip install -r requirements.txt
-
-# Configure platforms
-cp .env.example .env
-# Edit .env with your platform credentials
-
-# Initialize tonal engine
-npm run init-tonal
-
-# Start service
-npm run start
+**Windows:**
+```powershell
+winget install ShiningLight.OpenSSL.Dev
+# Install MinGW-w64 toolchain
 ```
 
-## Usage Examples
+### Compilation
 
-### Post Research Update
 ```bash
-mmuoko post \
-  --content "PhantomID now supports quantum coherence" \
-  --tone high \
-  --platforms "x,tiktok" \
-  --nsibidi "◈⟠◈"
+# Unix/Linux
+make clean && make
+
+# Windows
+mingw32-make -f Makefile.win clean
+mingw32-make -f Makefile.win
 ```
 
-### Schedule Harmonic Campaign
+### Running the Daemon
+
 ```bash
-mmuoko campaign \
-  --theme "Zero-Knowledge Proofs Explained" \
-  --duration "7 days" \
-  --tonal-pattern "◈◉◊◐◑◊◈" \
-  --platforms all
+# Standard deployment
+./phantomid
+
+# Custom configuration
+./phantomid -p 9999 -v -d --cluster-mode
+
+# Quantum coherence mode
+./phantomid --enable-quantum-coherence --seal-protocol v2
 ```
 
-### Analyze Engagement
+## Usage
+
+### Client Commands
 ```bash
-mmuoko analytics \
-  --metric resonance \
-  --period "last-week" \
-  --breakdown-by tone
+# Connect to daemon
+nc localhost 8888
+
+# Core operations
+create [parent_id]     # Create identity with optional parent
+delete <id>           # Delete identity (triggers orphan protocol)
+msg <from> <to> <msg> # Quantum-secured messaging
+seal <id>             # Issue Phantom Aura Seal
+cluster status        # View cluster coherence state
+list [bfs|dfs]        # Traverse identity tree
 ```
 
-## Cultural Integration
+## Security Considerations
 
-### Nsibidi Symbols in Posts
-- 🔷 (Udi) - Unity/Connection
-- 🔶 (Eke) - Market/Exchange
-- 🔺 (Ulo) - Home/Foundation
-- 🔻 (Uzo) - Path/Direction
+### Cryptographic Foundations
+- **Hash Functions**: SHA-256 (identity), SHA-512 (HMAC)
+- **Entropy Source**: OpenSSL RAND_bytes with quantum seed injection
+- **ZKP Security**: 256-bit Schnorr with coherence validation
 
-### Igbo Proverbs as Hashtags
-- #OnuruUbaNogu - "Unity is strength"
-- #EziAhaKaEgoOcha - "Good name better than riches"
-- #OnyeMakaIbeYa - "Be your brother's keeper"
+### Quantum Resistance Roadmap
+- Current: Hash-based primitives with partial quantum resistance
+- Phase 2: Post-quantum lattice-based signatures
+- Phase 3: Full quantum-coherent identity management
 
-## Future Roadmap
+### Thread Safety
+- All tree operations protected by pthread mutexes
+- Lock-free algorithms for high-frequency operations
+- Memory barriers for quantum state consistency
 
-### Phase 1: Foundation (Q4 2025)
-- Basic tonal analysis engine
-- Platform integrations (X, TikTok, YouTube)
-- Nsibidi symbol library
+## Future Directions
 
-### Phase 2: Resonance (Q1 2026)
-- AI-powered tonal optimization
-- Real-time harmonic adjustment
-- Cross-cultural tonal mapping
+1. **Full Quantum Integration**: Direct quantum channel implementation
+2. **Cross-Cluster Federation**: Global identity coherence
+3. **Neural Network Integration**: AI-driven trust evaluation
+4. **Blockchain Bridge**: Hybrid quantum-classical consensus
 
-### Phase 3: Symphony (Q2 2026)
-- Multi-platform orchestration
-- Quantum-coherent content distribution
-- Global tonal network establishment
+## References
 
-## Contributing
+### Papers
+- [Formal Proof of Zero-Knowledge Protocol and HMAC-based Derived Key Security](docs/formal-proof.pdf)
+- [Phantom Encoder Design Pattern for Zero-Knowledge Systems](docs/phantom-encoder-pattern.pdf)
+- "Quantum Coherence in Distributed Identity Systems" (In preparation)
 
-We welcome contributions that enhance tonal resonance:
+### Specifications
+- OBINexus Identity Protocol v2.0
+- Phantom Aura Seal Specification
+- Cluster Coherence Protocol
 
-1. Fork the repository
-2. Create a tonal branch (`git checkout -b feature/tonal-enhancement`)
-3. Commit with Nsibidi markers (`git commit -m "◈ Add harmonic analysis"`)
-4. Push to branch (`git push origin feature/tonal-enhancement`)
-5. Open a Pull Request with tonal analysis
-
-## Community
-
-- **Discord**: [OBINexus Resonance Chamber](https://discord.gg/obinexus)
-- **Telegram**: [@MmuokoConnect](https://t.me/mmuokoconnect)
-- **Twitter/X**: [@OBINexusSocial](https://x.com/obinexussocial)
+### Related Projects
+- [Node-Zero Library](https://github.com/obinexuscomputing/node-zero)
+- [OBINexus Core](https://github.com/obinexus/core)
 
 ## License
 
-Copyright © 2025 OBINexus Computing. All rights reserved.
-
-Special provisions for tonal content under Creative Commons BY-NC-SA 4.0.
+Proprietary and Confidential. Copyright © 2025 OBINexus Computing.
+Unauthorized distribution or use is prohibited. All rights reserved.
 
 ---
 
-*"In the resonance of tones, we find connection."*  
-*"N'ụda dị iche iche, anyị na-ahụ njikọ."*
-
-**Obi** (Heart) + **Nexus** (Connection) = **OBINexus**  
-Where every heartbeat creates a connection.
+*"When classical systems fail, we transcend to quantum coherence."*  
+*- OBINexus Computing Philosophy*
