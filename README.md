@@ -1,231 +1,323 @@
-# PhantomID Network System
+# Mmuoko Connect (མྨུཨོཀོ་ཀོནེཀཏ)
 
-## Prototype Notice and Abuse Prevention Disclaimer
+## The Resonant Social Network for OBINexus
 
-**This system is currently a prototype implementation.** While the core daemonized identity tree and Zero-Knowledge Proof (ZKP) verification mechanisms are functional, certain trust policies are still under active development. Specifically, when a user logs in through a child account, they are not intended to maintain cryptographic control over any subordinate child nodes after a parent account is deleted or invalidated. The "Orphaned Cryptographic State" mechanism ensures that child nodes regain autonomy and cannot be held "hostage" by malicious child account operators. This protects the integrity of the identity tree and prevents abuse scenarios where compromised subtrees could persist unauthorized control.
+### Etymology & Tonal Philosophy
 
-**Key Prototype Limitations:**
-- Trust policy enforcement is still being refined
-- Network synchronization between multiple daemon instances requires additional testing
-- Post-quantum cryptographic migration is planned but not yet implemented
-- Production deployment should include additional audit logging and monitoring capabilities
+**Mmuoko** (Mmụọkọ) derives from Igbo tonal language:
+- **Mmu** (high tone) - "spirit/essence"
+- **Oko** (low tone) - "studio/creative space"
 
-## Overview
+The name embodies our philosophy: high concepts grounded in practical creation.
 
-PhantomID is a daemon-based cryptographic identity management system that maintains a live, self-healing hierarchical tree of anonymous accounts. Unlike traditional PKI or blockchain-based identity systems, PhantomID operates as a persistent service that continuously validates parent-child relationships using Zero-Knowledge Proofs (ZKPs), ensuring network integrity without exposing sensitive identity information.
+### Vision
 
-The system implements a novel approach to distributed identity management where nodes can survive parent deletion through an "Orphaned Cryptographic State" mechanism, allowing for network resilience and autonomous trust reconstruction.
+Mmuoko Connect transcends traditional social media by implementing tonal communication patterns inspired by Igbo language structures and Nsibidi ancient writing systems. We create resonant connections where every interaction has both high (strategic) and low (operational) tones.
+
+## Core Concept: Tonal Social Networking
+
+Traditional social media flattens communication. Mmuoko Connect introduces **7 Tonal Layers**:
+
+```
+Layer 7: Vision (Ọhụụ)      - Highest strategic tone
+Layer 6: Philosophy (Nkà)    - Conceptual frameworks
+Layer 5: Research (Nyocha)   - Academic discourse
+Layer 4: Development (Mmepe) - Technical implementation
+Layer 3: Community (Obodo)   - Social interaction
+Layer 2: Operations (Ọrụ)    - Daily activities
+Layer 1: Foundation (Ntọala) - Ground truth
+```
 
 ## Architecture
 
-PhantomID employs a daemon-server architecture built around several core components:
-
 ```
-phantomid-with-tree/
-├── bin/               # Compiled binaries and shared libraries
-├── obj/               # Intermediate build artifacts
-├── main.c             # Daemon initialization and signal handling
-├── network.c/.h       # TCP server and client connection management
-├── phantomid.c/.h     # Core identity tree and ZKP implementation
-├── Makefile*          # Build configurations for Unix/Windows
-└── config/            # Runtime configuration files
-```
-
-### Core Components
-
-- **Phantom Daemon Process**: A persistent service that maintains the identity tree state and performs continuous cryptographic verification
-- **Hierarchical Identity Tree**: A dynamic tree structure where each node represents a cryptographic identity with parent-child relationships
-- **ZKP Verification Engine**: Schnorr-based zero-knowledge proof system for identity validation
-- **Network Protocol Layer**: TCP-based communication for identity operations and tree synchronization
-- **Orphan State Manager**: Handles node isolation and reparenting when tree integrity is compromised
-
-## Daemonized Process and ZKP-based Tree Maintenance
-
-### Root Account Initialization
-
-Upon system startup, PhantomID creates a **Root Account** that serves as the cryptographic anchor for the entire identity tree. This root account:
-
-- Generates a cryptographically secure seed using OpenSSL's RAND_bytes
-- Derives a 64-character hexadecimal identity using SHA-256
-- Establishes itself as the sole administrative node with `is_root=true` and `is_admin=true`
-- Begins continuous self-verification using ZKP protocols
-
-### Live Tree Verification
-
-The daemon continuously performs the following verification operations:
-
-1. **Parent-Child Link Validation**: Each node's relationship to its parent is verified using Schnorr identification protocols
-2. **Identity Freshness Checks**: Account expiration times are monitored and expired accounts are flagged for removal
-3. **Cryptographic Integrity**: Hash chains and derived keys are validated against stored commitments
-4. **Network Consensus**: When multiple daemon instances operate, they synchronize tree state using authenticated messages
-
-### ZKP Protocol Implementation
-
-The system implements a modified Schnorr protocol for identity proofs:
-
-```c
-// Commitment phase
-t = g^r mod p
-
-// Challenge from verifier
-c ∈ Z_q (random)
-
-// Response calculation
-s = r + c * x_A mod q
-
-// Verification equation
-g^s ?= t * y_A^c mod p
+mmuoko-connect/
+├── core/                 # Core platform engine
+│   ├── tonal-engine/     # Tonal analysis and routing
+│   ├── resonance/        # Content harmonization
+│   └── nsibidi/          # Symbol-based communication
+├── platforms/            # Platform integrations
+│   ├── polyglot-x/       # Multi-language X integration
+│   ├── tiktok-schema/    # TikTok with OBINexus schema
+│   ├── resonant-tubes/   # YouTube tonal optimization
+│   └── iwu-channels/     # Native OBINexus channels
+├── content/              # Content management
+│   ├── research/         # Research network posts
+│   ├── development/      # Dev team updates
+│   └── community/        # Community engagement
+└── analytics/            # Tonal analytics engine
 ```
 
-Where `x_A` is the prover's private key, `y_A` is the public key, and the protocol ensures zero-knowledge disclosure.
+## The Nsibidi Protocol
 
-## Orphan Handling
-
-### Orphaned Cryptographic State
-
-When a parent node is deleted or becomes cryptographically invalid, child nodes enter an **Orphaned Cryptographic State**. In this state:
-
-- **Identity Preservation**: The node retains its cryptographic identity and can still prove possession of its private key
-- **Relationship Severance**: All parent-child links are marked as invalid but not destroyed
-- **Verification Capability**: The node can still participate in ZKP challenges and generate valid proofs
-- **Administrative Isolation and Anti-Abuse**: The node loses all inherited administrative privileges from its deleted parent and cannot retain cryptographic control over subordinate nodes. Orphaned nodes regain autonomy to prevent abuse scenarios where child nodes could be held "hostage" by a malicious operator.
-
-### Recovery Mechanisms
-
-Orphaned nodes have three primary recovery paths:
-
-#### 1. Isolation Mode
-- Node continues operating independently
-- Maintains internal cryptographic state
-- Can service local authentication requests
-- Cannot participate in broader network trust relationships
-
-#### 2. Subtree Formation
-- Multiple orphaned nodes can form new trust relationships
-- Mutual ZKP verification establishes lateral trust
-- One node may be elected as a new subtree root through consensus
-- Formed subtrees operate as independent cryptographic domains
-
-#### 3. Reparenting Negotiation
-- Orphaned nodes can request adoption by existing valid nodes
-- Requires explicit cryptographic proof exchange
-- New parent must verify orphan's cryptographic validity
-- Adoption is recorded with timestamps and audit trails
-
-### Network Healing Protocol
-
-The daemon implements an autonomous healing protocol:
+Inspired by ancient Nsibidi writing, we implement visual-tonal communication:
 
 ```
-1. Detect parent node failure/deletion
-2. Transition affected children to orphaned state
-3. Broadcast orphan status to network participants
-4. Initiate recovery protocol based on configured policy
-5. Verify new relationships using fresh ZKP exchanges
-6. Update tree structure and resume normal operations
+◈ = High tone marker (strategic content)
+◉ = Low tone marker (operational content)
+◐ = Rising tone (questions/exploration)
+◑ = Falling tone (conclusions/decisions)
+◊ = Mid tone (neutral information)
+◈◉ = Harmonic (balanced content)
+⟠ = Resonance point (viral potential)
 ```
 
-## Build and Run Instructions
+## Platform Integration Schema
+
+All posts follow the OBINexus naming convention:
+
+```
+<platform>.<tone>.<content-type>.obinexus.<team>.<timestamp>
+```
+
+Examples:
+- `tiktok.high.research.obinexus.crypto.2025-09-12`
+- `x.low.operations.obinexus.dev.2025-09-13`
+- `youtube.harmonic.tutorial.obinexus.education.2025-09-14`
+
+## Content Strategy
+
+### 1. Research Network Posts (Layer 5)
+- PhantomID architecture explanations
+- Zero-knowledge proof visualizations
+- Quantum coherence demonstrations
+
+### 2. Development Updates (Layer 4)
+- Code release announcements
+- Technical deep-dives
+- Live coding sessions
+
+### 3. Community Engagement (Layer 3)
+- Team member spotlights
+- User success stories
+- Cultural exchanges (Igbo tech terminology)
+
+### 4. Operational Updates (Layer 2)
+- Service status
+- Maintenance windows
+- Performance metrics
+
+## Team Roles & Tonal Assignments
+
+**High Tone Contributors (Strategic):**
+- NNAMDI MICHAEL OKPALA - Visionary Architecture
+- Chydea Chika - Philosophical Framework
+
+**Low Tone Contributors (Operational):**
+- Nweke Madu - Implementation Details
+- Chononso Ndulu - Community Management
+
+**Harmonic Contributors (Balanced):**
+- Mazi Chike - Cross-tonal Integration
+- Chydie Okpara - Content Harmonization
+
+## Musical Theory Integration
+
+Drawing from NNAMDI's musical theory background (age 10), each post category has a musical signature:
+
+```javascript
+const tonalSignatures = {
+  research: {
+    key: "C Major",
+    tempo: 120,    // Andante
+    dynamic: "mf", // Mezzo-forte
+    pattern: "◈◐◊◉" // High-Rising-Mid-Low
+  },
+  development: {
+    key: "G Minor",
+    tempo: 140,    // Allegro
+    dynamic: "f",  // Forte
+    pattern: "◉◈◉◈" // Low-High alternation
+  },
+  community: {
+    key: "F Major",
+    tempo: 100,    // Moderato
+    dynamic: "mp", // Mezzo-piano
+    pattern: "◊◊◐◑" // Stable with variation
+  }
+};
+```
+
+## Content Creation Workflow
+
+### 1. Tonal Analysis
+Before posting, content passes through tonal analysis:
+```bash
+mmuoko analyze --content "Your post content" --target-tone high
+```
+
+### 2. Harmonic Optimization
+Adjust content for maximum resonance:
+```bash
+mmuoko harmonize --input post.md --platform tiktok
+```
+
+### 3. Cross-Platform Deployment
+Deploy with tonal consistency:
+```bash
+mmuoko deploy --post optimized.json --platforms all --tone harmonic
+```
+
+## API Integration
+
+### REST Endpoints
+```
+POST   /api/v1/content/analyze     # Tonal analysis
+POST   /api/v1/content/harmonize   # Content optimization
+GET    /api/v1/analytics/resonance # Engagement metrics
+POST   /api/v1/deploy/multi        # Multi-platform deployment
+```
+
+### WebSocket Streams
+```
+ws://mmuoko.obinexus.org/live/tonal-stream   # Real-time tonal analysis
+ws://mmuoko.obinexus.org/live/resonance      # Viral detection
+```
+
+## Language Support
+
+Following the Niger-Congo language classification, we support:
+
+1. **Igbo** (Primary) - Full tonal analysis
+2. **Yoruba** - Tonal pattern recognition
+3. **Hausa** - Contextual translation
+4. **English** - Tonal mapping
+5. **French** - Accent preservation (où → high tone)
+6. **Portuguese** - Rhythmic alignment
+7. **Spanish** - Prosodic matching
+
+## Metrics & Analytics
+
+### Resonance Score (RS)
+Measures how well content resonates across tonal layers:
+```
+RS = (Engagement × Tonal_Clarity × Cultural_Relevance) / Time_Decay
+```
+
+### Harmonic Index (HI)
+Evaluates balance between high and low tones:
+```
+HI = |High_Tone_Count - Low_Tone_Count| / Total_Tones
+```
+
+Perfect harmony: HI = 0
+
+## Installation
 
 ### Prerequisites
-
-**Linux/Unix Systems:**
 ```bash
-sudo apt-get install build-essential libssl-dev pkg-config
-# or
-sudo dnf install gcc openssl-devel pkgconfig
+# Node.js 18+ with tonal analysis modules
+npm install -g @obinexus/mmuoko-cli
+
+# Python 3.9+ for Nsibidi processing
+pip install nsibidi-protocol tonal-analysis
 ```
 
-**Windows Systems:**
-```powershell
-winget install ShiningLight.OpenSSL.Dev
-# Install MinGW-w64 toolchain
-```
-
-### Compilation
-
+### Setup
 ```bash
-# Unix/Linux
-make clean && make
+# Clone repository
+git clone https://github.com/obinexus/mmuoko-connect.git
+cd mmuoko-connect
 
-# Windows
-mingw32-make -f Makefile.win clean
-mingw32-make -f Makefile.win
+# Install dependencies
+npm install
+python -m pip install -r requirements.txt
+
+# Configure platforms
+cp .env.example .env
+# Edit .env with your platform credentials
+
+# Initialize tonal engine
+npm run init-tonal
+
+# Start service
+npm run start
 ```
 
-### Running the Daemon
+## Usage Examples
 
+### Post Research Update
 ```bash
-# Start daemon on default port 8888
-./phantomid
-
-# Custom configuration
-./phantomid -p 9999 -v -d
-
-# Available options:
-# -p, --port PORT    Server port (default: 8888)
-# -v, --verbose      Enable detailed logging
-# -d, --debug        Debug mode with tree traversal output
-# -h, --help         Display usage information
+mmuoko post \
+  --content "PhantomID now supports quantum coherence" \
+  --tone high \
+  --platforms "x,tiktok" \
+  --nsibidi "◈⟠◈"
 ```
 
-### Client Operations
-
+### Schedule Harmonic Campaign
 ```bash
-# Connect to daemon
-nc localhost 8888
-
-# Available commands:
-create [parent_id]     # Create new account
-delete <id>           # Delete account (triggers orphan handling)
-msg <from> <to> <msg> # Send authenticated message
-list [bfs|dfs]        # Display tree structure
-help                  # Command reference
+mmuoko campaign \
+  --theme "Zero-Knowledge Proofs Explained" \
+  --duration "7 days" \
+  --tonal-pattern "◈◉◊◐◑◊◈" \
+  --platforms all
 ```
 
-## Security Model
+### Analyze Engagement
+```bash
+mmuoko analytics \
+  --metric resonance \
+  --period "last-week" \
+  --breakdown-by tone
+```
 
-### Cryptographic Foundations
+## Cultural Integration
 
-- **Hash Function**: SHA-256 for identity derivation, SHA-512 for HMAC operations
-- **Random Generation**: OpenSSL RAND_bytes for cryptographically secure entropy
-- **Key Derivation**: HMAC-based derived keys for purpose-specific identities
-- **ZKP Protocol**: Schnorr identification with 256-bit security level
+### Nsibidi Symbols in Posts
+- 🔷 (Udi) - Unity/Connection
+- 🔶 (Eke) - Market/Exchange
+- 🔺 (Ulo) - Home/Foundation
+- 🔻 (Uzo) - Path/Direction
 
-### Thread Safety and Memory Protection
+### Igbo Proverbs as Hashtags
+- #OnuruUbaNogu - "Unity is strength"
+- #EziAhaKaEgoOcha - "Good name better than riches"
+- #OnyeMakaIbeYa - "Be your brother's keeper"
 
-- **Mutex Protection**: All tree operations are protected by pthread mutexes
-- **Memory Management**: Secure allocation with overflow detection and cleanup
-- **Constant-Time Operations**: Verification operations resist timing attacks
-- **Resource Isolation**: Client connections are isolated with separate state management
+## Future Roadmap
 
-### Attack Resistance
+### Phase 1: Foundation (Q4 2025)
+- Basic tonal analysis engine
+- Platform integrations (X, TikTok, YouTube)
+- Nsibidi symbol library
 
-- **Malicious Node Deletion**: Orphan handling prevents cascade failures
-- **Network Partition**: Subtrees can operate independently and merge when connectivity restores
-- **Replay Attacks**: Timestamps and nonces prevent message replay
-- **Timing Attacks**: Constant-time comparison functions for all cryptographic operations
+### Phase 2: Resonance (Q1 2026)
+- AI-powered tonal optimization
+- Real-time harmonic adjustment
+- Cross-cultural tonal mapping
 
-### Quantum Considerations
+### Phase 3: Symphony (Q2 2026)
+- Multi-platform orchestration
+- Quantum-coherent content distribution
+- Global tonal network establishment
 
-While primarily based on hash functions (which provide some quantum resistance), the current implementation uses discrete logarithm-based ZKPs. Future versions will incorporate post-quantum cryptographic primitives for full quantum resistance.
+## Contributing
 
-## References and Papers
+We welcome contributions that enhance tonal resonance:
 
-### Formal Specifications
-- [Formal Proof of Zero-Knowledge Protocol and HMAC-based Derived Key Security](https://github.com/obinexuscomputing/phantomid-poc/blob/main/docs/formal-proof.pdf)
-- [Phantom Encoder Design Pattern for Zero-Knowledge Systems](https://github.com/obinexuscomputing/phantomid-poc/blob/main/docs/phantom-encoder-pattern.pdf)
+1. Fork the repository
+2. Create a tonal branch (`git checkout -b feature/tonal-enhancement`)
+3. Commit with Nsibidi markers (`git commit -m "◈ Add harmonic analysis"`)
+4. Push to branch (`git push origin feature/tonal-enhancement`)
+5. Open a Pull Request with tonal analysis
 
-### Related Implementations
-- **Python Phantom Encoder**: Available as part of the Node-Zero library
-- **C Implementation**: This repository (PhantomID daemon)
-- **Project Repository**: https://github.com/obinexuscomputing/phantomid-poc/
+## Community
 
-### Cryptographic References
-1. Schnorr, C.P. (1991). "Efficient signature generation by smart cards." Journal of Cryptology, 4(3), 161-174.
-2. Goldwasser, S., Micali, S., & Rackoff, C. (1989). "The knowledge complexity of interactive proof systems." SIAM Journal on Computing, 18(1), 186-208.
-3. Krawczyk, H., Bellare, M., & Canetti, R. (1997). "HMAC: Keyed-hashing for message authentication." RFC 2104.
+- **Discord**: [OBINexus Resonance Chamber](https://discord.gg/obinexus)
+- **Telegram**: [@MmuokoConnect](https://t.me/mmuokoconnect)
+- **Twitter/X**: [@OBINexusSocial](https://x.com/obinexussocial)
+
+## License
+
+Copyright © 2025 OBINexus Computing. All rights reserved.
+
+Special provisions for tonal content under Creative Commons BY-NC-SA 4.0.
 
 ---
 
-**Legal Notice**: This software is proprietary and confidential. Unauthorized distribution or use is prohibited. All rights reserved.
+*"In the resonance of tones, we find connection."*  
+*"N'ụda dị iche iche, anyị na-ahụ njikọ."*
+
+**Obi** (Heart) + **Nexus** (Connection) = **OBINexus**  
+Where every heartbeat creates a connection.
