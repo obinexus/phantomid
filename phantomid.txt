@@ -1,0 +1,1525 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <errno.h>
+#ifdef _WIN32
+    #include <winsock2.h>
+    #include <windows.h>
+    #define sleep(x) Sleep(x * 1000)
+    #define usleep(x) Sleep(x / 1000)
+#else
+    #include <unistd.h>
+    #include <signal.h>
+#endif
+#include "phantomid.h"
+
+static PhantomDaemon phantom_daemon;
+static volatile bool running = true;
+
+// Signal handler for graceful shutdown
+void handle_signal(int sig) {
+    printf("\nReceived signal %d, initiating shutdown...\n", sig);
+    running = false;
+}
+
+// Print program usage
+void print_usage(const char* program_name) {
+    printf("PhantomID Daemon - Anonymous Account Management System\n\n");
+    printf("Usage: %s [OPTIONS]\n", program_name);
+    printf("Options:\n");
+    printf("  -p, --port PORT    Port to listen on (default: 8888)\n");
+    printf("  -v, --verbose      Enable verbose logging\n");
+    printf("  -d, --debug        Enable debug mode\n");
+    printf("  -h, --help         Show this help message\n");
+}
+
+// Initialize signal handlers
+void setup_signals(void) {
+#ifdef _WIN32
+    signal(SIGINT, handle_signal);
+    signal(SIGTERM, handle_signal);
+#else
+    struct sigaction sa = {0};
+    sa.sa_handler = handle_signal;
+    sigemptyset(&sa.sa_mask);
+    
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
+    sigaction(SIGHUP, &sa, NULL);
+#endif
+}
+
+// Print system status
+void print_status(const PhantomDaemon* phantom) {
+    printf("\nPhantomID System Status:\n");
+    printf("------------------------\n");
+    printf("Total Nodes: %zu\n", phantom_tree_size(phantom));
+    printf("Root Exists: %s\n", phantom_tree_has_root(phantom) ? "Yes" : "No");
+    printf("Tree Depth: %zu\n", phantom_tree_depth(phantom));
+    printf("System Time: %lld\n", (long long)phantom_get_time());
+    printf("------------------------\n");
+}
+
+// Debug visitor function for tree traversal
+void debug_visitor(PhantomNode* node, void* user_data) {
+    bool is_verbose = *(bool*)user_data;
+    printf("Node ID: %s (Root: %s, Admin: %s)\n",
+           node->account.id,
+           node->is_root ? "Yes" : "No",
+           node->is_admin ? "Yes" : "No");
+    
+    if (is_verbose) {
+        printf("  Children: %zu/%zu\n", node->child_count, node->max_children);
+        printf("  Created: %llu\n", (unsigned long long)node->account.creation_time);
+        printf("  Expires: %llu\n", (unsigned long long)node->account.expiry_time);
+    }
+}
+
+int main(int argc, char* argv[]) {
+#ifdef _WIN32
+    WSADATA wsaData;
+    if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+        fprintf(stderr, "Failed to initialize Winsock\n");
+        return 1;
+    }
+#endif
+
+    uint16_t port = 8888;
+    bool verbose = false;
+    bool debug = false;
+    
+    // Parse command line arguments
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+            print_usage(argv[0]);
+            return 0;
+        }
+        else if (strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--port") == 0) {
+            if (i + 1 < argc) {
+                int temp_port = atoi(argv[i + 1]);
+                if (temp_port > 0 && temp_port < 65536) {
+                    port = (uint16_t)temp_port;
+                    i++;
+                } else {
+                    fprintf(stderr, "Invalid port number. Must be between 1 and 65535\n");
+                    return 1;
+                }
+            } else {
+                fprintf(stderr, "Port number not provided\n");
+                return 1;
+            }
+        }
+        else if (strcmp(argv[i], "-v") == 0 || strcmp(argv[i], "--verbose") == 0) {
+            verbose = true;
+        }
+        else if (strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--debug") == 0) {
+            debug = true;
+        }
+        else {
+            fprintf(stderr, "Unknown option: %s\n", argv[i]);
+            print_usage(argv[0]);
+            return 1;
+        }
+    }
+    
+    setup_signals();
+    
+    printf("Initializing PhantomID daemon on port %d...\n", port);
+    if (!phantom_init(&phantom_daemon, port)) {
+        fprintf(stderr, "Failed to initialize PhantomID daemon: %s\n", 
+                phantom_get_error());
+#ifdef _WIN32
+        WSACleanup();
+#endif
+        return 1;
+    }
+    
+    if (verbose || debug) {
+        print_status(&phantom_daemon);
+        
+        if (debug) {
+            printf("\nTree structure (BFS):\n");
+            phantom_tree_bfs(&phantom_daemon, debug_visitor, &verbose);
+            
+            printf("\nTree structure (DFS):\n");
+            phantom_tree_dfs(&phantom_daemon, debug_visitor, &verbose);
+        }
+    }
+    
+    printf("\nPhantomID daemon is running. Press Ctrl+C to stop.\n");
+    
+    while (running) {
+        phantom_run(&phantom_daemon);
+        
+        if (verbose) {
+            print_status(&phantom_daemon);
+        }
+        
+        usleep(100000); // 100ms
+    }
+    
+    printf("\nCleaning up PhantomID daemon...\n");
+    phantom_cleanup(&phantom_daemon);
+    printf("PhantomID daemon stopped successfully\n");
+    
+#ifdef _WIN32
+    WSACleanup();
+#endif
+
+    return 0;
+}
+#include "network.h"
+
+// Initialize client state
+void net_init_client_state(ClientState* state) {
+    pthread_mutex_init(&state->lock, NULL);
+    state->is_active = false;
+    state->socket_fd = 0;
+    memset(&state->addr, 0, sizeof(state->addr));
+}
+
+// Clean up client state
+void net_cleanup_client_state(ClientState* state) {
+    pthread_mutex_lock(&state->lock);
+    if (state->socket_fd > 0) {
+        close(state->socket_fd);
+        state->socket_fd = 0;
+    }
+    state->is_active = false;
+    pthread_mutex_unlock(&state->lock);
+    pthread_mutex_destroy(&state->lock);
+}
+
+bool net_is_port_in_use(uint16_t port) {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) return true;  // Error on the safe side
+    
+    struct sockaddr_in addr = {
+        .sin_family = AF_INET,
+        .sin_port = htons(port),
+        .sin_addr.s_addr = INADDR_ANY
+    };
+    
+    int result = bind(sock, (struct sockaddr*)&addr, sizeof(addr));
+    close(sock);
+    
+    return result < 0;
+}
+
+// Attempt to release port
+bool net_release_port(uint16_t port) {
+    int sock = socket(AF_INET, SOCK_STREAM, 0);
+    if (sock < 0) return false;
+    
+    struct sockaddr_in addr = {
+        .sin_family = AF_INET,
+        .sin_port = htons(port),
+        .sin_addr.s_addr = INADDR_ANY
+    };
+    
+    // Set SO_REUSEADDR
+    int opt = 1;
+    setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt));
+    
+    // Attempt to bind and immediately close
+    int result = bind(sock, (struct sockaddr*)&addr, sizeof(addr));
+    close(sock);
+    
+    // Small delay to ensure port is released
+    usleep(100000);  // 100ms
+    
+    return result >= 0;
+}
+
+// Update net_init to include port checking and cleanup
+bool net_init(NetworkEndpoint* endpoint) {
+    if (!endpoint) return false;
+    
+    // Check if port is in use
+    if (net_is_port_in_use(endpoint->port)) {
+        printf("Port %d is in use, attempting to release...\n", endpoint->port);
+        if (!net_release_port(endpoint->port)) {
+            printf("Failed to release port %d\n", endpoint->port);
+            printf("Please try:\n");
+            printf("1. Wait a few seconds and try again\n");
+            printf("2. Use a different port with -p option\n");
+            printf("3. Or manually kill the process using the port:\n");
+            printf("   sudo lsof -i :%d\n", endpoint->port);
+            printf("   sudo kill <PID>\n");
+            return false;
+        }
+        printf("Successfully released port %d\n", endpoint->port);
+    }
+    
+    pthread_mutex_init(&endpoint->lock, NULL);
+    pthread_mutex_lock(&endpoint->lock);
+    
+    // Create socket
+    endpoint->socket_fd = socket(AF_INET, 
+        endpoint->protocol == NET_TCP ? SOCK_STREAM : SOCK_DGRAM, 
+        0);
+    
+    if (endpoint->socket_fd < 0) {
+        perror("Socket creation failed");
+        pthread_mutex_unlock(&endpoint->lock);
+        pthread_mutex_destroy(&endpoint->lock);
+        return false;
+    }
+
+    // Set socket options
+    int opt = 1;
+    if (setsockopt(endpoint->socket_fd, SOL_SOCKET, SO_REUSEADDR, &opt, sizeof(opt)) < 0) {
+        perror("setsockopt failed");
+        close(endpoint->socket_fd);
+        pthread_mutex_unlock(&endpoint->lock);
+        pthread_mutex_destroy(&endpoint->lock);
+        return false;
+    }
+    
+    // Configure address
+    endpoint->addr.sin_family = AF_INET;
+    endpoint->addr.sin_port = htons(endpoint->port);
+    endpoint->addr.sin_addr.s_addr = INADDR_ANY;
+    
+    // For server endpoints
+    if (endpoint->role == NET_SERVER) {
+        if (bind(endpoint->socket_fd, (struct sockaddr*)&endpoint->addr, sizeof(endpoint->addr)) < 0) {
+            perror("Bind failed");
+            close(endpoint->socket_fd);
+            pthread_mutex_unlock(&endpoint->lock);
+            pthread_mutex_destroy(&endpoint->lock);
+            return false;
+        }
+        
+        if (endpoint->protocol == NET_TCP) {
+            if (listen(endpoint->socket_fd, NET_MAX_CLIENTS) < 0) {
+                perror("Listen failed");
+                close(endpoint->socket_fd);
+                pthread_mutex_unlock(&endpoint->lock);
+                pthread_mutex_destroy(&endpoint->lock);
+                return false;
+            }
+        }
+    }
+
+    pthread_mutex_unlock(&endpoint->lock);
+    return true;
+}
+
+// Update net_close to ensure complete cleanup
+void net_close(NetworkEndpoint* endpoint) {
+    if (!endpoint) return;
+    
+    pthread_mutex_lock(&endpoint->lock);
+    
+    if (endpoint->socket_fd > 0) {
+        // Set linger to ensure complete socket shutdown
+        struct linger ling = {1, 0};  // Immediate shutdown
+        setsockopt(endpoint->socket_fd, SOL_SOCKET, SO_LINGER, &ling, sizeof(ling));
+        
+        shutdown(endpoint->socket_fd, SHUT_RDWR);  // Shutdown both directions
+        close(endpoint->socket_fd);
+        endpoint->socket_fd = 0;
+    }
+    
+    pthread_mutex_unlock(&endpoint->lock);
+    pthread_mutex_destroy(&endpoint->lock);
+}
+
+// Send data through network endpoint
+ssize_t net_send(NetworkEndpoint* endpoint, NetworkPacket* packet) {
+    if (!endpoint || !packet) return -1;
+    
+    ssize_t result;
+    pthread_mutex_lock(&endpoint->lock);
+    result = send(endpoint->socket_fd, packet->data, packet->size, packet->flags);
+    pthread_mutex_unlock(&endpoint->lock);
+    return result;
+}
+
+// Receive data through network endpoint
+ssize_t net_receive(NetworkEndpoint* endpoint, NetworkPacket* packet) {
+    if (!endpoint || !packet) return -1;
+    
+    ssize_t result;
+    pthread_mutex_lock(&endpoint->lock);
+    result = recv(endpoint->socket_fd, packet->data, packet->size, packet->flags);
+    pthread_mutex_unlock(&endpoint->lock);
+    return result;
+}
+
+// Add client to program
+bool net_add_client(NetworkProgram* program, int socket_fd, struct sockaddr_in addr) {
+    if (!program) return false;
+    
+    bool added = false;
+    pthread_mutex_lock(&program->clients_lock);
+    
+    for (int i = 0; i < NET_MAX_CLIENTS; i++) {
+        pthread_mutex_lock(&program->clients[i].lock);
+        if (!program->clients[i].is_active) {
+            program->clients[i].socket_fd = socket_fd;
+            program->clients[i].addr = addr;
+            program->clients[i].is_active = true;
+            added = true;
+            pthread_mutex_unlock(&program->clients[i].lock);
+            break;
+        }
+        pthread_mutex_unlock(&program->clients[i].lock);
+    }
+    
+    pthread_mutex_unlock(&program->clients_lock);
+    return added;
+}
+
+// Remove client from program
+void net_remove_client(NetworkProgram* program, int socket_fd) {
+    if (!program) return;
+    
+    pthread_mutex_lock(&program->clients_lock);
+    
+    for (int i = 0; i < NET_MAX_CLIENTS; i++) {
+        pthread_mutex_lock(&program->clients[i].lock);
+        if (program->clients[i].is_active && program->clients[i].socket_fd == socket_fd) {
+            close(program->clients[i].socket_fd);
+            program->clients[i].is_active = false;
+            program->clients[i].socket_fd = 0;
+        }
+        pthread_mutex_unlock(&program->clients[i].lock);
+    }
+    
+    pthread_mutex_unlock(&program->clients_lock);
+}
+
+// Initialize network program
+void net_init_program(NetworkProgram* program) {
+    if (!program) return;
+    
+    pthread_mutex_init(&program->clients_lock, NULL);
+    program->running = true;
+    
+    for (int i = 0; i < NET_MAX_CLIENTS; i++) {
+        net_init_client_state(&program->clients[i]);
+    }
+}
+
+// Clean up network program
+void net_cleanup_program(NetworkProgram* program) {
+    if (!program) return;
+    
+    pthread_mutex_lock(&program->clients_lock);
+    program->running = false;
+    
+    for (int i = 0; i < NET_MAX_CLIENTS; i++) {
+        net_cleanup_client_state(&program->clients[i]);
+    }
+    
+    pthread_mutex_unlock(&program->clients_lock);
+    pthread_mutex_destroy(&program->clients_lock);
+}
+
+// Run network program
+void net_run(NetworkProgram* program) {
+    if (!program || !program->running) return;
+
+    fd_set readfds;
+    struct timeval tv = {
+        .tv_sec = 1,  // 1 second timeout
+        .tv_usec = 0
+    };
+
+    // Setup file descriptors
+    FD_ZERO(&readfds);
+    int max_fd = program->endpoints[0].socket_fd;
+    FD_SET(max_fd, &readfds);
+
+    // Add active clients
+    pthread_mutex_lock(&program->clients_lock);
+    for (int i = 0; i < NET_MAX_CLIENTS; i++) {
+        pthread_mutex_lock(&program->clients[i].lock);
+        if (program->clients[i].is_active) {
+            int fd = program->clients[i].socket_fd;
+            FD_SET(fd, &readfds);
+            if (fd > max_fd) max_fd = fd;
+        }
+        pthread_mutex_unlock(&program->clients[i].lock);
+    }
+    pthread_mutex_unlock(&program->clients_lock);
+
+    // Wait for activity with timeout
+    int activity = select(max_fd + 1, &readfds, NULL, NULL, &tv);
+    
+    if (activity < 0) {
+        if (errno != EINTR) {
+            perror("select error");
+        }
+        return;
+    }
+
+    // Handle new connections
+    if (FD_ISSET(program->endpoints[0].socket_fd, &readfds)) {
+        struct sockaddr_in client_addr;
+        socklen_t addr_len = sizeof(client_addr);
+        
+        int new_socket = accept(program->endpoints[0].socket_fd,
+                              (struct sockaddr*)&client_addr,
+                              &addr_len);
+
+        if (new_socket >= 0) {
+            // Set socket to non-blocking mode
+            int flags = fcntl(new_socket, F_GETFL, 0);
+            if (flags >= 0) {
+                fcntl(new_socket, F_SETFL, flags | O_NONBLOCK);
+            }
+
+            // Add client
+            if (net_add_client(program, new_socket, client_addr)) {
+                NetworkEndpoint client_endpoint = {
+                    .socket_fd = new_socket,
+                    .addr = client_addr,
+                    .phantom = program->phantom
+                };
+                
+                if (program->handlers.on_connect) {
+                    program->handlers.on_connect(&client_endpoint);
+                }
+            } else {
+                close(new_socket);
+            }
+        }
+    }
+
+    // Handle client data
+    pthread_mutex_lock(&program->clients_lock);
+    for (int i = 0; i < NET_MAX_CLIENTS; i++) {
+        pthread_mutex_lock(&program->clients[i].lock);
+        if (program->clients[i].is_active &&
+            FD_ISSET(program->clients[i].socket_fd, &readfds)) {
+            
+            char buffer[NET_BUFFER_SIZE];
+            ssize_t bytes_read = recv(program->clients[i].socket_fd,
+                                    buffer,
+                                    sizeof(buffer) - 1,
+                                    0);
+
+            if (bytes_read <= 0) {
+                // Handle disconnection
+                NetworkEndpoint client_endpoint = {
+                    .socket_fd = program->clients[i].socket_fd,
+                    .addr = program->clients[i].addr,
+                    .phantom = program->phantom
+                };
+
+                if (program->handlers.on_disconnect) {
+                    program->handlers.on_disconnect(&client_endpoint);
+                }
+                
+                net_remove_client(program, program->clients[i].socket_fd);
+            } else {
+                // Handle received data
+                NetworkEndpoint client_endpoint = {
+                    .socket_fd = program->clients[i].socket_fd,
+                    .addr = program->clients[i].addr,
+                    .phantom = program->phantom
+                };
+
+                NetworkPacket packet = {
+                    .data = buffer,
+                    .size = bytes_read,
+                    .flags = 0
+                };
+
+                if (program->handlers.on_receive) {
+                    program->handlers.on_receive(&client_endpoint, &packet);
+                }
+            }
+        }
+        pthread_mutex_unlock(&program->clients[i].lock);
+    }
+    pthread_mutex_unlock(&program->clients_lock);
+}
+#include "phantomid.h"
+#include "network.h"
+
+#define QUEUE_SIZE 1000
+
+// Static globals
+static char error_buffer[256] = {0};
+
+// Queue for BFS traversal
+typedef struct {
+    PhantomNode* nodes[QUEUE_SIZE];
+    size_t front;
+    size_t rear;
+    size_t size;
+} NodeQueue;
+
+// Queue operations
+static void queue_init(NodeQueue* q) {
+    q->front = 0;
+    q->rear = 0;
+    q->size = 0;
+}
+
+
+// Forward declarations of callback functions
+void on_client_data(NetworkEndpoint* endpoint, NetworkPacket* packet);
+void on_client_connect(NetworkEndpoint* endpoint);
+void on_client_disconnect(NetworkEndpoint* endpoint);
+
+static bool queue_push(NodeQueue* q, PhantomNode* node) {
+    if (q->size >= QUEUE_SIZE) return false;
+    q->nodes[q->rear] = node;
+    q->rear = (q->rear + 1) % QUEUE_SIZE;
+    q->size++;
+    return true;
+}
+
+static PhantomNode* queue_pop(NodeQueue* q) {
+    if (q->size == 0) return NULL;
+    PhantomNode* node = q->nodes[q->front];
+    q->front = (q->front + 1) % QUEUE_SIZE;
+    q->size--;
+    return node;
+}
+
+// Generate cryptographic seed
+static void generate_seed(uint8_t* seed) {
+    RAND_bytes(seed, 32);
+}
+
+// Generate anonymous ID
+static void generate_id(const uint8_t* seed, char* id) {
+    unsigned int len;
+    uint8_t hash[EVP_MAX_MD_SIZE];
+    
+    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    if (ctx) {
+        EVP_DigestInit_ex(ctx, EVP_sha256(), NULL);
+        EVP_DigestUpdate(ctx, seed, 32);
+        EVP_DigestFinal_ex(ctx, hash, &len);
+        EVP_MD_CTX_free(ctx);
+        
+        for (unsigned int i = 0; i < 32; i++) {
+            sprintf(&id[i * 2], "%02x", hash[i]);
+        }
+        id[64] = '\0';
+    }
+}
+
+// Create new node
+static PhantomNode* create_node(const PhantomAccount* account, bool is_root) {
+    PhantomNode* node = calloc(1, sizeof(PhantomNode));
+    if (!node) {
+        snprintf(error_buffer, sizeof(error_buffer), "Failed to allocate node");
+        return NULL;
+    }
+    
+    node->children = calloc(MAX_CHILDREN, sizeof(PhantomNode*));
+    if (!node->children) {
+        snprintf(error_buffer, sizeof(error_buffer), "Failed to allocate children array");
+        free(node);
+        return NULL;
+    }
+    
+    memcpy(&node->account, account, sizeof(PhantomAccount));
+    node->parent = NULL;
+    node->child_count = 0;
+    node->max_children = MAX_CHILDREN;
+    node->is_root = is_root;
+    node->is_admin = is_root;
+    pthread_mutex_init(&node->node_lock, NULL);
+    
+    return node;
+}
+
+// Tree initialization
+bool phantom_tree_init(PhantomDaemon* phantom) {
+    phantom->tree = calloc(1, sizeof(PhantomTree));
+    if (!phantom->tree) {
+        snprintf(error_buffer, sizeof(error_buffer), "Failed to allocate tree");
+        return false;
+    }
+    
+    phantom->tree->root = NULL;
+    phantom->tree->total_nodes = 0;
+    pthread_mutex_init(&phantom->tree->tree_lock, NULL);
+    return true;
+}
+
+// Recursive cleanup helper
+static void cleanup_node(PhantomNode* node) {
+    if (!node) return;
+    
+    for (size_t i = 0; i < node->child_count; i++) {
+        cleanup_node(node->children[i]);
+    }
+    
+    pthread_mutex_destroy(&node->node_lock);
+    free(node->children);
+    free(node);
+}
+
+// Tree cleanup
+void phantom_tree_cleanup(PhantomDaemon* phantom) {
+    if (!phantom || !phantom->tree) return;
+    
+    pthread_mutex_lock(&phantom->tree->tree_lock);
+    cleanup_node(phantom->tree->root);
+    pthread_mutex_unlock(&phantom->tree->tree_lock);
+    
+    pthread_mutex_destroy(&phantom->tree->tree_lock);
+    free(phantom->tree);
+    phantom->tree = NULL;
+}
+
+// Find node by ID
+PhantomNode* phantom_tree_find(PhantomDaemon* phantom, const char* id) {
+    if (!phantom || !phantom->tree || !id) return NULL;
+    
+    NodeQueue queue;
+    queue_init(&queue);
+    
+    pthread_mutex_lock(&phantom->tree->tree_lock);
+    
+    if (!phantom->tree->root) {
+        pthread_mutex_unlock(&phantom->tree->tree_lock);
+        return NULL;
+    }
+    
+    queue_push(&queue, phantom->tree->root);
+    
+    while (queue.size > 0) {
+        PhantomNode* node = queue_pop(&queue);
+        pthread_mutex_lock(&node->node_lock);
+        
+        if (strcmp(node->account.id, id) == 0) {
+            pthread_mutex_unlock(&node->node_lock);
+            pthread_mutex_unlock(&phantom->tree->tree_lock);
+            return node;
+        }
+        
+        for (size_t i = 0; i < node->child_count; i++) {
+            queue_push(&queue, node->children[i]);
+        }
+        
+        pthread_mutex_unlock(&node->node_lock);
+    }
+    
+    pthread_mutex_unlock(&phantom->tree->tree_lock);
+    return NULL;
+}
+
+// Insert node into tree
+PhantomNode* phantom_tree_insert(PhantomDaemon* phantom, const PhantomAccount* account, const char* parent_id) {
+    if (!phantom || !phantom->tree || !account) {
+        snprintf(error_buffer, sizeof(error_buffer), "Invalid parameters");
+        return NULL;
+    }
+    
+    pthread_mutex_lock(&phantom->tree->tree_lock);
+    
+    // Create root if tree is empty
+    if (!phantom->tree->root) {
+        if (parent_id) {
+            pthread_mutex_unlock(&phantom->tree->tree_lock);
+            snprintf(error_buffer, sizeof(error_buffer), "Cannot specify parent for root node");
+            return NULL;
+        }
+        
+        phantom->tree->root = create_node(account, true);
+        if (phantom->tree->root) {
+            phantom->tree->total_nodes = 1;
+        }
+        
+        pthread_mutex_unlock(&phantom->tree->tree_lock);
+        return phantom->tree->root;
+    }
+    
+    // Find parent node
+    PhantomNode* parent = parent_id ? phantom_tree_find(phantom, parent_id) : phantom->tree->root;
+    if (!parent) {
+        pthread_mutex_unlock(&phantom->tree->tree_lock);
+        snprintf(error_buffer, sizeof(error_buffer), "Parent node not found");
+        return NULL;
+    }
+    
+    pthread_mutex_lock(&parent->node_lock);
+    
+    // Check if parent can accept more children
+    if (parent->child_count >= parent->max_children) {
+        pthread_mutex_unlock(&parent->node_lock);
+        pthread_mutex_unlock(&phantom->tree->tree_lock);
+        snprintf(error_buffer, sizeof(error_buffer), "Parent node full");
+        return NULL;
+    }
+    
+    // Create and insert new node
+    PhantomNode* node = create_node(account, false);
+    if (node) {
+        node->parent = parent;
+        parent->children[parent->child_count++] = node;
+        phantom->tree->total_nodes++;
+    }
+    
+    pthread_mutex_unlock(&parent->node_lock);
+    pthread_mutex_unlock(&phantom->tree->tree_lock);
+    
+    return node;
+}
+
+// Delete node from tree
+bool phantom_tree_delete(PhantomDaemon* phantom, const char* id) {
+    if (!phantom || !phantom->tree || !id) return false;
+    
+    pthread_mutex_lock(&phantom->tree->tree_lock);
+    
+    PhantomNode* node = phantom_tree_find(phantom, id);
+    if (!node) {
+        pthread_mutex_unlock(&phantom->tree->tree_lock);
+        return false;
+    }
+    
+    pthread_mutex_lock(&node->node_lock);
+    
+    // Cannot delete root if it has children
+    if (node->is_root && node->child_count > 0) {
+        pthread_mutex_unlock(&node->node_lock);
+        pthread_mutex_unlock(&phantom->tree->tree_lock);
+        snprintf(error_buffer, sizeof(error_buffer), "Cannot delete root with children");
+        return false;
+    }
+    
+    // Update parent's children array
+    if (node->parent) {
+        pthread_mutex_lock(&node->parent->node_lock);
+        
+        for (size_t i = 0; i < node->parent->child_count; i++) {
+            if (node->parent->children[i] == node) {
+                // Shift remaining children left
+                memmove(&node->parent->children[i],
+                       &node->parent->children[i + 1],
+                       (node->parent->child_count - i - 1) * sizeof(PhantomNode*));
+                node->parent->child_count--;
+                break;
+            }
+        }
+        
+        pthread_mutex_unlock(&node->parent->node_lock);
+    } else {
+        phantom->tree->root = NULL;
+    }
+    
+    // Redistribute node's children
+    for (size_t i = 0; i < node->child_count; i++) {
+        PhantomNode* child = node->children[i];
+        pthread_mutex_lock(&child->node_lock);
+        
+        child->parent = node->parent;
+        child->is_admin = node->is_admin; // Inherit admin status
+        
+        if (node->parent) {
+            pthread_mutex_lock(&node->parent->node_lock);
+            node->parent->children[node->parent->child_count++] = child;
+            pthread_mutex_unlock(&node->parent->node_lock);
+        }
+        
+        pthread_mutex_unlock(&child->node_lock);
+    }
+    
+    pthread_mutex_unlock(&node->node_lock);
+    
+    // Cleanup node
+    pthread_mutex_destroy(&node->node_lock);
+    free(node->children);
+    free(node);
+    
+    phantom->tree->total_nodes--;
+    
+    pthread_mutex_unlock(&phantom->tree->tree_lock);
+    return true;
+}
+
+// BFS traversal
+void phantom_tree_bfs(PhantomDaemon* phantom, TreeVisitor visitor, void* user_data) {
+    if (!phantom || !phantom->tree || !visitor) return;
+    
+    NodeQueue queue;
+    queue_init(&queue);
+    
+    pthread_mutex_lock(&phantom->tree->tree_lock);
+    
+    if (!phantom->tree->root) {
+        pthread_mutex_unlock(&phantom->tree->tree_lock);
+        return;
+    }
+    
+    queue_push(&queue, phantom->tree->root);
+    
+    while (queue.size > 0) {
+        PhantomNode* node = queue_pop(&queue);
+        pthread_mutex_lock(&node->node_lock);
+        
+        visitor(node, user_data);
+        
+        for (size_t i = 0; i < node->child_count; i++) {
+            queue_push(&queue, node->children[i]);
+        }
+        
+        pthread_mutex_unlock(&node->node_lock);
+    }
+    
+    pthread_mutex_unlock(&phantom->tree->tree_lock);
+}
+
+// DFS traversal helper
+static void dfs_helper(PhantomNode* node, TreeVisitor visitor, void* user_data) {
+    if (!node) return;
+    
+    pthread_mutex_lock(&node->node_lock);
+    
+    visitor(node, user_data);
+    
+    for (size_t i = 0; i < node->child_count; i++) {
+        dfs_helper(node->children[i], visitor, user_data);
+    }
+    
+    pthread_mutex_unlock(&node->node_lock);
+}
+
+// DFS traversal
+void phantom_tree_dfs(PhantomDaemon* phantom, TreeVisitor visitor, void* user_data) {
+    if (!phantom || !phantom->tree || !visitor) return;
+    
+    pthread_mutex_lock(&phantom->tree->tree_lock);
+    
+    if (phantom->tree->root) {
+        dfs_helper(phantom->tree->root, visitor, user_data);
+    }
+    
+    pthread_mutex_unlock(&phantom->tree->tree_lock);
+}
+
+// Tree status functions
+bool phantom_tree_has_root(const PhantomDaemon* phantom) {
+    if (!phantom || !phantom->tree) return false;
+    return phantom->tree->root != NULL;
+}
+
+size_t phantom_tree_size(const PhantomDaemon* phantom) {
+    if (!phantom || !phantom->tree) return 0;
+    return phantom->tree->total_nodes;
+}
+
+// Calculate tree depth helper
+static size_t get_depth_helper(PhantomNode* node) {
+    if (!node) return 0;
+    
+    size_t max_depth = 0;
+    for (size_t i = 0; i < node->child_count; i++) {
+        size_t depth = get_depth_helper(node->children[i]);
+        if (depth > max_depth) max_depth = depth;
+    }
+    
+    return max_depth + 1;
+}
+
+// Calculate tree depth
+size_t phantom_tree_depth(const PhantomDaemon* phantom) {
+    if (!phantom || !phantom->tree || !phantom->tree->root) return 0;
+    return get_depth_helper(phantom->tree->root);
+}
+
+// Print tree helper
+static void print_node(PhantomNode* node, void* user_data) {
+    int* level = (int*)user_data;
+    for (int i = 0; i < *level; i++) printf("  ");
+    printf("- %s (%s, %s)\n", node->account.id,
+           node->is_root ? "Root" : "Child",
+           node->is_admin ? "Admin" : "User");
+}
+
+// Print tree structure
+void phantom_tree_print(const PhantomDaemon* phantom) {
+    if (!phantom || !phantom->tree) return;
+    
+    printf("PhantomID Tree Structure:\n");
+    int level = 0;
+    phantom_tree_dfs((PhantomDaemon*)phantom, print_node, &level);
+}
+
+
+
+// Initialize PhantomID daemon
+
+bool phantom_init(PhantomDaemon* phantom, uint16_t port) {
+    if (!phantom) return false;
+    
+    memset(phantom, 0, sizeof(PhantomDaemon));
+    pthread_mutex_init(&phantom->state_lock, NULL);
+    
+    if (!phantom_tree_init(phantom)) {
+        return false;
+    }
+    
+    // Initialize network server
+    NetworkEndpoint server = {
+        .address = "0.0.0.0",
+        .port = port,
+        .protocol = NET_TCP,
+        .role = NET_SERVER,
+        .phantom = phantom
+    };
+    
+    phantom->network.endpoints = malloc(sizeof(NetworkEndpoint));
+    if (!phantom->network.endpoints) {
+        phantom_tree_cleanup(phantom);
+        return false;
+    }
+    
+    memcpy(phantom->network.endpoints, &server, sizeof(NetworkEndpoint));
+    phantom->network.count = 1;
+    phantom->network.phantom = phantom;
+    
+    // Set up handlers
+    phantom->network.handlers.on_connect = phantom_on_client_connect;
+    phantom->network.handlers.on_disconnect = phantom_on_client_disconnect;
+    phantom->network.handlers.on_receive = phantom_on_client_data;
+    
+    if (!net_init(&phantom->network.endpoints[0])) {
+        phantom_tree_cleanup(phantom);
+        free(phantom->network.endpoints);
+        return false;
+    }
+    
+    return true;
+}
+
+
+void phantom_cleanup(PhantomDaemon* phantom) {
+    if (!phantom) return;
+    
+    pthread_mutex_lock(&phantom->state_lock);
+    phantom->running = false;
+    
+    // Cleanup tree
+    phantom_tree_cleanup(phantom);
+    
+    // Cleanup network resources
+    if (phantom->network.endpoints) {
+        for (size_t i = 0; i < phantom->network.count; i++) {
+            net_close(&phantom->network.endpoints[i]);
+        }
+        free(phantom->network.endpoints);
+    }
+    
+    pthread_mutex_unlock(&phantom->state_lock);
+    pthread_mutex_destroy(&phantom->state_lock);
+}
+
+
+
+// Network callbacks implementation
+void phantom_on_client_data(NetworkEndpoint* endpoint, NetworkPacket* packet) {
+    char* data = (char*)packet->data;
+    data[packet->size] = '\0';
+    
+    printf("Received command: %s", data);
+    
+    char response[MAX_MESSAGE_SIZE] = {0};
+    NetworkPacket resp = {
+        .data = response,
+        .size = sizeof(response),
+        .flags = 0
+    };
+
+    // Parse command
+    if (strncmp(data, "create", 6) == 0) {
+        char parent_id[65] = {0};
+        if (sscanf(data + 6, "%64s", parent_id) == 1) {
+            PhantomAccount account = {0};
+            generate_seed(account.seed);
+            generate_id(account.seed, account.id);
+            account.creation_time = time(NULL);
+            account.expiry_time = account.creation_time + (90 * 24 * 60 * 60);
+            
+            PhantomNode* node = phantom_tree_insert(endpoint->phantom, &account, parent_id);
+            if (node) {
+                snprintf(response, sizeof(response),
+                        "\nAccount created:\nID: %s\nParent: %s\nRoot: %s\nAdmin: %s\n",
+                        account.id, parent_id,
+                        node->is_root ? "Yes" : "No",
+                        node->is_admin ? "Yes" : "No");
+            } else {
+                snprintf(response, sizeof(response),
+                        "\nFailed to create account: %s\n",
+                        phantom_get_error());
+            }
+        } else {
+            PhantomAccount account = {0};
+            generate_seed(account.seed);
+            generate_id(account.seed, account.id);
+            account.creation_time = time(NULL);
+            account.expiry_time = account.creation_time + (90 * 24 * 60 * 60);
+            
+            PhantomNode* node = phantom_tree_insert(endpoint->phantom, &account, NULL);
+            if (node) {
+                snprintf(response, sizeof(response),
+                        "\nRoot account created:\nID: %s\n",
+                        account.id);
+            } else {
+                snprintf(response, sizeof(response),
+                        "\nFailed to create root account: %s\n",
+                        phantom_get_error());
+            }
+        }
+    }
+    else if (strncmp(data, "delete", 6) == 0) {
+        char id[65] = {0};
+        if (sscanf(data + 6, "%64s", id) == 1) {
+            if (phantom_tree_delete(endpoint->phantom, id)) {
+                snprintf(response, sizeof(response),
+                        "\nAccount deleted: %s\n", id);
+            } else {
+                snprintf(response, sizeof(response),
+                        "\nFailed to delete account: %s\n",
+                        phantom_get_error());
+            }
+        } else {
+            snprintf(response, sizeof(response),
+                    "\nInvalid delete command. Use: delete <id>\n");
+        }
+    }
+    else if (strncmp(data, "msg", 3) == 0) {
+        char from_id[65] = {0}, to_id[65] = {0}, message[MAX_MESSAGE_SIZE] = {0};
+        if (sscanf(data, "msg %64s %64s <%[^>]>", from_id, to_id, message) == 3) {
+            if (phantom_message_send(endpoint->phantom, from_id, to_id, message)) {
+                snprintf(response, sizeof(response),
+                        "\nMessage sent successfully from %s to %s\n", from_id, to_id);
+            } else {
+                snprintf(response, sizeof(response),
+                        "\nFailed to send message: %s\n",
+                        phantom_get_error());
+            }
+        } else {
+            snprintf(response, sizeof(response),
+                    "\nInvalid message format. Use: msg <from_id> <to_id> <message>\n");
+        }
+    }
+    else if (strncmp(data, "list", 4) == 0) {
+        if (strncmp(data + 4, " bfs", 4) == 0) {
+            snprintf(response, sizeof(response), "\nTree Structure (BFS):\n");
+            struct PrintContext {
+                char* buffer;
+                size_t offset;
+                size_t max_size;
+            } print_ctx = {response, strlen(response), sizeof(response)};
+            
+            phantom_tree_bfs(endpoint->phantom, print_node, &print_ctx);
+            resp.size = print_ctx.offset;
+        }
+        else if (strncmp(data + 4, " dfs", 4) == 0) {
+            snprintf(response, sizeof(response), "\nTree Structure (DFS):\n");
+            struct PrintContext {
+                char* buffer;
+                size_t offset;
+                size_t max_size;
+            } print_ctx = {response, strlen(response), sizeof(response)};
+            
+            phantom_tree_dfs(endpoint->phantom, print_node, &print_ctx);
+            resp.size = print_ctx.offset;
+        }
+        else {
+            size_t total = phantom_tree_size(endpoint->phantom);
+            size_t depth = phantom_tree_depth(endpoint->phantom);
+            bool has_root = phantom_tree_has_root(endpoint->phantom);
+            
+            snprintf(response, sizeof(response),
+                    "\nTree Summary:\n"
+                    "Total Nodes: %zu\n"
+                    "Tree Depth: %zu\n"
+                    "Root Node: %s\n\n",
+                    total, depth,
+                    has_root ? "Present" : "Not Present");
+            
+            struct PrintContext {
+                char* buffer;
+                size_t offset;
+                size_t max_size;
+            } print_ctx = {response, strlen(response), sizeof(response)};
+            
+            phantom_tree_print(endpoint->phantom);
+            resp.size = print_ctx.offset;
+        }
+    }
+    else if (strncmp(data, "help", 4) == 0) {
+        snprintf(response, sizeof(response),
+                "\nPhantomID Commands:\n"
+                "----------------\n"
+                "create [parent_id]     Create new account (optionally under parent)\n"
+                "delete <id>           Delete account\n"
+                "msg <from> <to> <msg> Send message between accounts\n"
+                "list                  Show tree summary and structure\n"
+                "list bfs              Show tree using breadth-first traversal\n"
+                "list dfs              Show tree using depth-first traversal\n"
+                "help                  Show this help message\n"
+                "quit                  Disconnect from server\n\n"
+                "Message format: msg <from_id> <to_id> <message in brackets>\n"
+                "Example: msg abc123 def456 <Hello World!>\n");
+    }
+    else if (strncmp(data, "quit", 4) == 0) {
+        snprintf(response, sizeof(response), "\nDisconnecting...\n");
+    }
+    else {
+        snprintf(response, sizeof(response),
+                "\nUnknown command. Type 'help' for available commands.\n");
+    }
+    
+    // Set response size if not already set by specific commands
+    if (resp.size == 0) {
+        resp.size = strlen(response);
+    }
+
+    if (net_send(endpoint, &resp) < 0) {
+        printf("Failed to send response to client\n");
+    }
+}
+
+// Network callbacks with proper usage of parameters
+void phantom_on_client_connect(NetworkEndpoint* endpoint) {
+    char addr[INET_ADDRSTRLEN];
+#ifdef _WIN32
+    InetNtop(AF_INET, &(endpoint->addr.sin_addr), addr, INET_ADDRSTRLEN);
+#else
+    inet_ntop(AF_INET, &(endpoint->addr.sin_addr), addr, INET_ADDRSTRLEN);
+#endif
+    printf("New client connected from %s:%d\n", addr, 
+           ntohs(endpoint->addr.sin_port));
+}
+
+void phantom_on_client_disconnect(NetworkEndpoint* endpoint) {
+    char addr[INET_ADDRSTRLEN];
+#ifdef _WIN32
+    InetNtop(AF_INET, &(endpoint->addr.sin_addr), addr, INET_ADDRSTRLEN);
+#else
+    inet_ntop(AF_INET, &(endpoint->addr.sin_addr), addr, INET_ADDRSTRLEN);
+#endif
+    printf("Client disconnected from %s:%d\n", addr, 
+           ntohs(endpoint->addr.sin_port));
+}
+// Run daemon
+void phantom_run(PhantomDaemon* phantom) {
+    if (!phantom) return;
+    
+    printf("PhantomID daemon running...\n");
+    phantom->running = true;  // Set running flag
+
+    NetworkProgram* network = &phantom->network;
+    network->running = true;  // Set network running flag
+    
+    while (phantom->running) {
+        net_run(network);  // This should block until there's activity
+        if (!phantom->running) break;  // Check if we should stop
+    }
+
+    network->running = false;  // Clear network running flag
+    printf("PhantomID daemon stopped\n");
+}
+
+// Message sending implementation
+bool phantom_message_send(PhantomDaemon* phantom, const char* from_id,
+                         const char* to_id, const char* content) {
+    if (!phantom || !from_id || !to_id || !content) {
+        snprintf(error_buffer, sizeof(error_buffer), "Invalid parameters");
+        return false;
+    }
+    
+    // Verify both nodes exist
+    PhantomNode* from_node = phantom_tree_find(phantom, from_id);
+    PhantomNode* to_node = phantom_tree_find(phantom, to_id);
+    
+    if (!from_node || !to_node) {
+        snprintf(error_buffer, sizeof(error_buffer), "Source or destination node not found");
+        return false;
+    }
+    
+    // In a real implementation, I'd queue the message for delivery
+    // For now, just log it
+    printf("Message from %s to %s: %s\n", from_id, to_id, content);
+    return true;
+}
+
+// Get messages for a node
+PhantomMessage* phantom_message_get(PhantomDaemon* phantom, const char* id,
+                                  size_t* count) {    if (!phantom || !id || !count) {
+        snprintf(error_buffer, sizeof(error_buffer), "Invalid parameters");
+        return NULL;
+    }
+    
+    // Verify node exists
+    PhantomNode* node = phantom_tree_find(phantom, id);
+    if (!node) {
+        snprintf(error_buffer, sizeof(error_buffer), "Node not found");
+        return NULL;
+    }
+    
+    // In a real implementation, you'd retrieve queued messages
+    // For now, return nothing
+    *count = 0;
+    return NULL;
+}
+
+// Error handling
+const char* phantom_get_error(void) {
+    return error_buffer;
+}
+
+// Time utility
+time_t phantom_get_time(void) {
+    return time(NULL);
+}#ifndef NETWORK_H
+#define NETWORK_H
+#include <stdint.h>
+#include <stdbool.h>
+
+#ifdef _WIN32
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+    #include <windows.h>
+#else
+    #include <sys/socket.h>
+    #include <netinet/in.h>
+    #include <arpa/inet.h>
+#endif
+
+#include <pthread.h>
+#include <string.h>
+#include <stdio.h>
+#include <errno.h>
+#include <fcntl.h>
+
+// Windows compatibility defines
+#ifdef _WIN32
+    #define sleep(x) Sleep(x * 1000)
+    #define usleep(x) Sleep(x / 1000)
+    typedef int socklen_t;
+    #define close closesocket
+#else
+    #include <unistd.h>
+#endif
+
+
+// Network Constants
+#define NET_MAX_CLIENTS 10
+#define NET_BUFFER_SIZE 1024
+#define NET_MAX_BACKLOG 5
+#define NET_TIMEOUT_SEC 1
+#define NET_TIMEOUT_USEC 0
+
+// Network Error Codes
+typedef enum {
+    NET_SUCCESS = 0,
+    NET_ERROR_SOCKET = -1,
+    NET_ERROR_BIND = -2,
+    NET_ERROR_LISTEN = -3,
+    NET_ERROR_ACCEPT = -4,
+    NET_ERROR_SEND = -5,
+    NET_ERROR_RECEIVE = -6,
+    NET_ERROR_MEMORY = -7,
+    NET_ERROR_INVALID = -8
+} NetworkError;
+
+// Network Protocol Types
+typedef enum {
+    NET_TCP,            // TCP protocol
+    NET_UDP,            // UDP protocol
+    NET_RAW,           // Raw sockets
+    NET_PROTOCOL_MAX   // Protocol count
+} NetworkProtocol;
+
+// Network Role Types
+typedef enum {
+    NET_CLIENT,        // Client role
+    NET_SERVER,        // Server role
+    NET_PEER,         // Peer-to-peer role
+    NET_ROLE_MAX      // Role count
+} NetworkRole;
+
+// Forward declaration
+typedef struct PhantomDaemon PhantomDaemon;
+
+// Client Connection State
+typedef struct {
+    pthread_mutex_t lock;           // State mutex
+    bool is_active;                 // Active flag
+    int socket_fd;                  // Socket descriptor
+    struct sockaddr_in addr;        // Client address
+} ClientState;
+
+// Network Endpoint
+typedef struct {
+    pthread_mutex_t lock;           // Endpoint mutex
+    char address[INET_ADDRSTRLEN];  // IP address
+    uint16_t port;                  // Port number
+    NetworkProtocol protocol;       // Protocol type
+    NetworkRole role;               // Endpoint role
+    int socket_fd;                  // Socket descriptor
+    struct sockaddr_in addr;        // Socket address
+    PhantomDaemon* phantom;         // Phantom daemon reference
+} NetworkEndpoint;
+
+// Network Packet
+typedef struct {
+    void* data;                     // Packet data
+    size_t size;                    // Data size
+    uint32_t flags;                 // Packet flags
+} NetworkPacket;
+
+// Network Program
+typedef struct {
+    NetworkEndpoint* endpoints;      // Endpoint array
+    size_t count;                   // Endpoint count
+    ClientState clients[NET_MAX_CLIENTS]; // Client states
+    pthread_mutex_t clients_lock;    // Clients mutex
+    volatile bool running;           // Running flag
+    struct {
+        void (*on_receive)(NetworkEndpoint*, NetworkPacket*);  // Data handler
+        void (*on_connect)(NetworkEndpoint*);                  // Connect handler
+        void (*on_disconnect)(NetworkEndpoint*);               // Disconnect handler
+    } handlers;
+    PhantomDaemon* phantom;         // Phantom daemon reference
+} NetworkProgram;
+
+// Core Network Functions
+bool net_init(NetworkEndpoint* endpoint);
+void net_close(NetworkEndpoint* endpoint);
+ssize_t net_send(NetworkEndpoint* endpoint, NetworkPacket* packet);
+ssize_t net_receive(NetworkEndpoint* endpoint, NetworkPacket* packet);
+void net_run(NetworkProgram* program);
+
+// Utility Functions
+bool net_is_port_in_use(uint16_t port);
+bool net_release_port(uint16_t port);
+void net_init_client_state(ClientState* state);
+void net_cleanup_client_state(ClientState* state);
+void net_init_program(NetworkProgram* program);
+void net_cleanup_program(NetworkProgram* program);
+
+#endif // NETWORK_H#ifndef PHANTOMID_H
+#define PHANTOMID_H
+
+#include <string.h>
+#include <time.h>
+#include <stdio.h>
+#include <stdlib.h>
+#ifdef _WIN32
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+    #define sleep(x) Sleep(x * 1000)
+    #define usleep(x) Sleep(x / 1000)
+#else
+    #include <unistd.h>
+    #include <arpa/inet.h>
+#endif
+
+#include <openssl/evp.h>
+#include <openssl/rand.h>
+#include <assert.h>
+#include "network.h"
+
+#define MAX_ACCOUNTS 1000
+#define MAX_MESSAGE_SIZE 4096
+#define MAX_CHILDREN 10
+
+// Forward declarations
+struct PhantomNode;
+struct PhantomTree;
+struct PhantomMessage;
+
+typedef struct PhantomNode PhantomNode;
+typedef struct PhantomTree PhantomTree;
+typedef struct PhantomMessage PhantomMessage;
+
+// PhantomID account structure
+typedef struct {
+    uint8_t seed[32];
+    char id[65];
+    uint64_t creation_time;
+    uint64_t expiry_time;
+    pthread_mutex_t lock;
+} PhantomAccount;
+
+// Message structure
+struct PhantomMessage {
+    char from_id[65];
+    char to_id[65];
+    char content[MAX_MESSAGE_SIZE];
+    time_t timestamp;
+};
+
+// Tree node structure
+struct PhantomNode {
+    PhantomAccount account;
+    struct PhantomNode* parent;
+    struct PhantomNode** children;
+    size_t child_count;
+    size_t max_children;
+    bool is_root;
+    bool is_admin;
+    pthread_mutex_t node_lock;
+};
+
+// Tree structure
+struct PhantomTree {
+    PhantomNode* root;
+    size_t total_nodes;
+    pthread_mutex_t tree_lock;
+};
+
+// Network handlers declaration
+void phantom_on_client_data(NetworkEndpoint* endpoint, NetworkPacket* packet);
+void phantom_on_client_connect(NetworkEndpoint* endpoint);
+void phantom_on_client_disconnect(NetworkEndpoint* endpoint);
+
+// PhantomID daemon state
+typedef struct PhantomDaemon {
+    NetworkProgram network;
+    PhantomTree* tree;
+    pthread_mutex_t state_lock;
+    bool running;
+} PhantomDaemon;
+
+// Tree traversal callback type
+typedef void (*TreeVisitor)(PhantomNode* node, void* user_data);
+
+// Core functions
+bool phantom_tree_init(PhantomDaemon* phantom);
+void phantom_tree_cleanup(PhantomDaemon* phantom);
+bool phantom_init(PhantomDaemon* phantom, uint16_t port);
+void phantom_cleanup(PhantomDaemon* phantom);
+void phantom_run(PhantomDaemon* phantom);
+
+// Tree operations
+PhantomNode* phantom_tree_insert(PhantomDaemon* phantom, const PhantomAccount* account, const char* parent_id);
+bool phantom_tree_delete(PhantomDaemon* phantom, const char* id);
+PhantomNode* phantom_tree_find(PhantomDaemon* phantom, const char* id);
+
+// Tree traversal
+void phantom_tree_bfs(PhantomDaemon* phantom, TreeVisitor visitor, void* user_data);
+void phantom_tree_dfs(PhantomDaemon* phantom, TreeVisitor visitor, void* user_data);
+void phantom_tree_print(const PhantomDaemon* phantom);
+
+// Status queries
+bool phantom_tree_has_root(const PhantomDaemon* phantom);
+size_t phantom_tree_size(const PhantomDaemon* phantom);
+size_t phantom_tree_depth(const PhantomDaemon* phantom);
+
+// Message operations
+bool phantom_message_send(PhantomDaemon* phantom, const char* from_id, const char* to_id, const char* content);
+PhantomMessage* phantom_message_get(PhantomDaemon* phantom, const char* id, size_t* count);
+
+// Utility functions
+const char* phantom_get_error(void);
+time_t phantom_get_time(void);
+
+#endif // PHANTOMID_H
